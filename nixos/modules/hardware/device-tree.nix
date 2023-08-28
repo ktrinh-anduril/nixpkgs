@@ -136,7 +136,7 @@ in
             [
               ./my_custom_include_dir_1
               ./custom_include_dir_2
-            ]          
+            ]
           '';
           type = types.listOf types.path;
           description = lib.mdDoc ''

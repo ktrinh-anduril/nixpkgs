@@ -3,10 +3,10 @@
 with lib; {
   # Compile single Device Tree overlay source
   # file (.dts) into its compiled variant (.dtb)
-  compileDTS = ({ 
-    name, 
-    dtsFile, 
-    includePaths ? [], 
+  compileDTS = ({
+    name,
+    dtsFile,
+    includePaths ? [],
     extraFlags ? []
   }: stdenv.mkDerivation {
     inherit name;
