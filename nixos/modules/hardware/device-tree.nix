@@ -66,23 +66,32 @@ let
   };
 
   filterDTBs = src: if cfg.filter == null
-    then "${src}/dtbs"
+    then src
     else
       pkgs.runCommand "dtbs-filtered" {} ''
         mkdir -p $out
-        cd ${src}/dtbs
+        cd ${src}
         find . -type f -name '${cfg.filter}' -print0 \
           | xargs -0 cp -v --no-preserve=mode --target-directory $out --parents
       '';
 
-  filteredDTBs = filterDTBs cfg.kernelPackage;
+  filteredDTBs = filterDTBs cfg.dtbSource;
 
   # Fill in `dtboFile` for each overlay if not set already.
   # Existence of one of these is guarded by assertion below
   withDTBOs = xs: flip map xs (o: o // { dtboFile =
+    let
+      includePaths = ["${getDev cfg.kernelPackage}/lib/modules/${cfg.kernelPackage.modDirVersion}/source/scripts/dtc/include-prefixes"] ++ cfg.dtboBuildExtraIncludePaths;
+      extraFlags = cfg.dtboBuildExtraFlags;
+    in
     if o.dtboFile == null then
-      if o.dtsFile != null then compileDTS o.name o.dtsFile
-      else compileDTS o.name (pkgs.writeText "dts" o.dtsText)
+      let
+        dtsFile = if o.dtsFile == null then (pkgs.writeText "dts" o.dtsText) else o.dtsFile;
+      in
+      pkgs.deviceTree.compileDTS {
+        name = "${o.name}-dtbo";
+        inherit includePaths extraFlags dtsFile;
+      }
     else o.dtboFile; } );
 
 in
@@ -108,7 +117,39 @@ in
           example = literalExpression "pkgs.linux_latest";
           type = types.path;
           description = lib.mdDoc ''
-            Kernel package containing the base device-tree (.dtb) to boot. Uses
+            Kernel package where device tree include directory is from. Also use as default source of dtb package to apply overlays to
+          '';
+        };
+
+        dtboBuildExtraFlags = mkOption {
+          default = [];
+          example = literalExpression "[ \"-DMY_DTB_DEFINE\" ]";
+          type = types.listOf types.str;
+          description = lib.mdDoc ''
+            Additional flags to pass to the preprocessor during dtbo compilations
+          '';
+        };
+
+        dtboBuildExtraIncludePaths = mkOption {
+          default = [];
+          example = literalExpression ''
+            [
+              ./my_custom_include_dir_1
+              ./custom_include_dir_2
+            ]          
+          '';
+          type = types.listOf types.path;
+          description = lib.mdDoc ''
+            Additional include paths that will be passed to the preprocessor when creating the final .dts to compile into .dtbo
+          '';
+        };
+
+        dtbSource = mkOption {
+          default = "${cfg.kernelPackage}/dtbs";
+          defaultText = literalExpression "\${cfg.kernelPackage}/dtbs";
+          type = types.path;
+          description = lib.mdDoc ''
+            Path to dtb directory that overlays and other processing will be applied to. Uses
             device trees bundled with the Linux kernel by default.
           '';
         };
