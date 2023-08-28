@@ -82,7 +82,7 @@ let
   withDTBOs = xs: flip map xs (o: o // { dtboFile =
     let
       includePaths = ["${getDev cfg.kernelPackage}/lib/modules/${cfg.kernelPackage.modDirVersion}/source/scripts/dtc/include-prefixes"] ++ cfg.dtboBuildExtraIncludePaths;
-      extraFlags = cfg.dtboBuildExtraFlags;
+      extraPreprocessorFlags = cfg.dtboBuildExtraPreprocessorFlags;
     in
     if o.dtboFile == null then
       let
@@ -90,7 +90,7 @@ let
       in
       pkgs.deviceTree.compileDTS {
         name = "${o.name}-dtbo";
-        inherit includePaths extraFlags dtsFile;
+        inherit includePaths extraPreprocessorFlags dtsFile;
       }
     else o.dtboFile; } );
 
@@ -117,11 +117,11 @@ in
           example = literalExpression "pkgs.linux_latest";
           type = types.path;
           description = lib.mdDoc ''
-            Kernel package where device tree include directory is from. Also use as default source of dtb package to apply overlays to
+            Kernel package where device tree include directory is from. Also used as default source of dtb package to apply overlays to
           '';
         };
 
-        dtboBuildExtraFlags = mkOption {
+        dtboBuildExtraPreprocessorFlags = mkOption {
           default = [];
           example = literalExpression "[ \"-DMY_DTB_DEFINE\" ]";
           type = types.listOf types.str;

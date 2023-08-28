@@ -7,7 +7,7 @@ with lib; {
     name,
     dtsFile,
     includePaths ? [],
-    extraFlags ? []
+    extraPreprocessorFlags ? []
   }: stdenv.mkDerivation {
     inherit name;
 
@@ -16,10 +16,10 @@ with lib; {
     buildCommand =
       let
         includeFlagsStr = lib.concatMapStringsSep " " (includePath: "-I${includePath}") includePaths;
-        extraFlagsStr = lib.concatStringsSep " " extraFlags;
+        extraPreprocessorFlagsStr = lib.concatStringsSep " " extraPreprocessorFlags;
       in
       ''
-        $CC -E -nostdinc ${includeFlagsStr} -undef -D__DTS__ -x assembler-with-cpp ${extraFlagsStr} ${dtsFile} | \
+        $CC -E -nostdinc ${includeFlagsStr} -undef -D__DTS__ -x assembler-with-cpp ${extraPreprocessorFlagsStr} ${dtsFile} | \
         dtc -I dts -O dtb -@ -o $out
       '';
   });
