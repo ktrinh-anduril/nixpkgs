@@ -77,19 +77,6 @@ let
 
   filteredDTBs = filterDTBs cfg.kernelPackage;
 
-  # Compile single Device Tree overlay source
-  # file (.dts) into its compiled variant (.dtbo)
-  compileDTS = name: f: pkgs.callPackage({ stdenv, dtc }: stdenv.mkDerivation {
-    name = "${name}-dtbo";
-
-    nativeBuildInputs = [ dtc ];
-
-    buildCommand = ''
-      $CC -E -nostdinc -I${getDev cfg.kernelPackage}/lib/modules/${cfg.kernelPackage.modDirVersion}/source/scripts/dtc/include-prefixes -undef -D__DTS__ -x assembler-with-cpp ${f} | \
-        dtc -I dts -O dtb -@ -o $out
-    '';
-  }) {};
-
   # Fill in `dtboFile` for each overlay if not set already.
   # Existence of one of these is guarded by assertion below
   withDTBOs = xs: flip map xs (o: o // { dtboFile =
