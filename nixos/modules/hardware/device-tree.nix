@@ -36,7 +36,7 @@ let
           Name of the dts source
         '';
       };
-      
+
       dtsFile = mkOption {
         type = types.nullOr types.path;
         description = lib.mdDoc ''
@@ -159,7 +159,7 @@ let
       '';
 
   filteredDTBs = filterDTBs cfg.dtbSource;
-  
+
   dtbFromDtsSrc = buildDtb {
     name = "${cfg.dtsSource.name}.dtb";
     dtsFile = if cfg.dtsSource.dtsFile == null then (pkgs.writeText "dts" cfg.dtsSource.dtsText) else cfg.dtsSource.dtsFile;
@@ -309,11 +309,11 @@ in
       }
     ];
 
-    hardware.deviceTree.package = 
-      let 
-        finalDtbSource = 
-          if cfg.dtsSource == null 
-          then filteredDTBs 
+    hardware.deviceTree.package =
+      let
+        finalDtbSource =
+          if cfg.dtsSource == null
+          then filteredDTBs
           else pkgs.runCommand "${cfg.dtsSource.name}-dtb-dir" {} ''
             # put the compiled Dtb into a directory
             # since applyOverlays expect a dir
