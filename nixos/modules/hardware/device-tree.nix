@@ -5,6 +5,87 @@ with lib;
 let
   cfg = config.hardware.deviceTree;
 
+  buildExtraPreprocessorFlags = mkOption {
+    default = [];
+    example = literalExpression "[ \"-DMY_DTB_DEFINE\" ]";
+    type = types.listOf types.str;
+    description = lib.mdDoc ''
+      Additional flags to pass to the preprocessor during .dtb/.dtbo compilations
+    '';
+  };
+
+  buildExtraIncludePaths = mkOption {
+    default = [];
+    example = literalExpression ''
+      [
+        ./my_custom_include_dir_1
+        ./custom_include_dir_2
+      ]
+    '';
+    type = types.listOf types.path;
+    description = lib.mdDoc ''
+      Additional include paths that will be passed to the preprocessor when creating the final .dts to compile into .dtbo/.dtb
+    '';
+  };
+
+  dtsSourceType = types.submodule {
+    options = {
+      name = mkOption {
+        type = types.str;
+        description = lib.mdDoc ''
+          Name of the dts source
+        '';
+      };
+      
+      dtsFile = mkOption {
+        type = types.nullOr types.path;
+        description = lib.mdDoc ''
+          Path to .dts source file that will be compiled into the .dtb that is served as the base to apply overlay to. Take precedence over the {option}`dtsText` option.
+        '';
+        default = null;
+        example = literalExpression "./dts/top-level.dts";
+      };
+
+      dtsText = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = lib.mdDoc ''
+          Literal DTS contents that will be compiled into the .dtb that is served as the base to apply overlays to. Will be ignored if {option}`dtsFile` option is also specified.
+        '';
+        example = ''
+          /dts-v1/;
+
+          #include "zynqmp.dtsi"
+          #include <dt-bindings/pinctrl/pinctrl-zynqmp.h>
+          #include <dt-bindings/phy/phy.h>
+
+          / {
+            model = "ZynqMP ZCU208 RevA";
+            compatible = "xlnx,zynqmp-zcu208-revA";
+
+            aliases {
+              ethernet0 = &gem3;
+              i2c0 = &i2c0;
+              i2c1 = &i2c1;
+            };
+
+            chosen {
+              bootargs = "earlycon";
+              stdout-path = "serial0:115200n8";
+            };
+
+            memory@0 {
+              device_type = "memory";
+              reg = <0x0 0x0 0x0 0x80000000>, <0x8 0x00000000 0x0 0x80000000>;
+            };
+          };
+        '';
+      };
+
+      inherit buildExtraPreprocessorFlags buildExtraIncludePaths;
+    };
+  };
+
   overlayType = types.submodule {
     options = {
       name = mkOption {
@@ -62,6 +143,8 @@ let
           Path to .dtbo compiled overlay file.
         '';
       };
+
+      inherit buildExtraPreprocessorFlags buildExtraIncludePaths;
     };
   };
 
@@ -76,21 +159,33 @@ let
       '';
 
   filteredDTBs = filterDTBs cfg.dtbSource;
+  
+  dtbFromDtsSrc = buildDtb {
+    name = "${cfg.dtsSource.name}.dtb";
+    dtsFile = if cfg.dtsSource.dtsFile == null then (pkgs.writeText "dts" cfg.dtsSource.dtsText) else cfg.dtsSource.dtsFile;
+    inherit (cfg.dtsSource) buildExtraPreprocessorFlags buildExtraIncludePaths;
+  };
+
+  buildDtb = { name, dtsFile, buildExtraIncludePaths, buildExtraPreprocessorFlags }:
+    let
+      includePaths = ["${getDev cfg.kernelPackage}/lib/modules/${cfg.kernelPackage.modDirVersion}/source/scripts/dtc/include-prefixes"] ++ buildExtraIncludePaths;
+      extraPreprocessorFlags = buildExtraPreprocessorFlags;
+    in
+      pkgs.deviceTree.compileDTS {
+        inherit name includePaths dtsFile extraPreprocessorFlags;
+      };
 
   # Fill in `dtboFile` for each overlay if not set already.
   # Existence of one of these is guarded by assertion below
   withDTBOs = xs: flip map xs (o: o // { dtboFile =
-    let
-      includePaths = ["${getDev cfg.kernelPackage}/lib/modules/${cfg.kernelPackage.modDirVersion}/source/scripts/dtc/include-prefixes"] ++ cfg.dtboBuildExtraIncludePaths;
-      extraPreprocessorFlags = cfg.dtboBuildExtraPreprocessorFlags;
-    in
     if o.dtboFile == null then
       let
+        name = "${o.name}-dtbo";
         dtsFile = if o.dtsFile == null then (pkgs.writeText "dts" o.dtsText) else o.dtsFile;
       in
-      pkgs.deviceTree.compileDTS {
-        name = "${o.name}-dtbo";
-        inherit includePaths extraPreprocessorFlags dtsFile;
+      buildDtb {
+        inherit name dtsFile;
+        inherit (o) buildExtraPreprocessorFlags buildExtraIncludePaths;
       }
     else o.dtboFile; } );
 
@@ -121,26 +216,11 @@ in
           '';
         };
 
-        dtboBuildExtraPreprocessorFlags = mkOption {
-          default = [];
-          example = literalExpression "[ \"-DMY_DTB_DEFINE\" ]";
-          type = types.listOf types.str;
+        dtsSource = mkOption {
+          default = null;
+          type = types.nullOr dtsSourceType;
           description = lib.mdDoc ''
-            Additional flags to pass to the preprocessor during dtbo compilations
-          '';
-        };
-
-        dtboBuildExtraIncludePaths = mkOption {
-          default = [];
-          example = literalExpression ''
-            [
-              ./my_custom_include_dir_1
-              ./custom_include_dir_2
-            ]
-          '';
-          type = types.listOf types.path;
-          description = lib.mdDoc ''
-            Additional include paths that will be passed to the preprocessor when creating the final .dts to compile into .dtbo
+            Dts source that is used to compile into .dtb that serves as base to apply overlay to. This will take precedence over the {option}`hardware.deviceTree.dtbSource` option if both are specified.
           '';
         };
 
@@ -150,7 +230,7 @@ in
           type = types.path;
           description = lib.mdDoc ''
             Path to dtb directory that overlays and other processing will be applied to. Uses
-            device trees bundled with the Linux kernel by default.
+            device trees bundled with the Linux kernel by default. Will be ignored if {option}`hardware.deviceTree.dtsSource` is also specified.
           '';
         };
 
@@ -170,7 +250,7 @@ in
           default = null;
           example = "*rpi*.dtb";
           description = lib.mdDoc ''
-            Only include .dtb files matching glob expression.
+            Only include .dtb files matching glob expression. Only used with {option}`hardware.deviceTree.dtbSource` option
           '';
         };
 
@@ -219,8 +299,20 @@ in
       '';
     };
 
-    hardware.deviceTree.package = if (cfg.overlays != [])
-      then pkgs.deviceTree.applyOverlays filteredDTBs (withDTBOs cfg.overlays)
-      else filteredDTBs;
+    hardware.deviceTree.package = 
+      let 
+        finalDtbSource = 
+          if cfg.dtsSource == null 
+          then filteredDTBs 
+          else pkgs.runCommand "${cfg.dtsSource.name}-dtb-dir" {} ''
+            # put the compiled Dtb into a directory
+            # since applyOverlays expect a dir
+            mkdir -p $out
+            cp ${dtbFromDtsSrc} $out/${cfg.dtsSource.name}.dtb
+          '';
+      in
+        if (cfg.overlays != [])
+          then pkgs.deviceTree.applyOverlays finalDtbSource (withDTBOs cfg.overlays)
+          else finalDtbSource;
   };
 }
