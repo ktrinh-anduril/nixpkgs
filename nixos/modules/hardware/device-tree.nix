@@ -290,14 +290,24 @@ in
 
     assertions = let
       invalidOverlay = o: (o.dtsFile == null) && (o.dtsText == null) && (o.dtboFile == null);
-    in lib.singleton {
-      assertion = lib.all (o: !invalidOverlay o) cfg.overlays;
-      message = ''
-        deviceTree overlay needs one of dtsFile, dtsText or dtboFile set.
-        Offending overlay(s):
-        ${toString (map (o: o.name) (builtins.filter invalidOverlay cfg.overlays))}
-      '';
-    };
+      invalidDtsSource = s: (s.dtsFile == null) && (s.dtsText == null);
+    in
+    [
+      {
+        assertion = cfg.dtsSource == null || !(invalidDtsSource cfg.dtsSource);
+        message = ''
+          dtsSource needs one of dtsFile or dtsText set
+        '';
+      }
+      {
+        assertion = lib.all (o: !invalidOverlay o) cfg.overlays;
+        message = ''
+          deviceTree overlay needs one of dtsFile, dtsText or dtboFile set.
+          Offending overlay(s):
+          ${toString (map (o: o.name) (builtins.filter invalidOverlay cfg.overlays))}
+        '';
+      }
+    ];
 
     hardware.deviceTree.package = 
       let 
